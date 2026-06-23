@@ -427,6 +427,17 @@ h1 span {
   transform: scale(1.012);
 }
 
+.dropzone.limit-reached,
+.dropzone.limit-reached:hover,
+.dropzone.limit-reached.dragover {
+  border-color: var(--border-strong);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.025);
+  cursor: not-allowed;
+  transform: none;
+  animation: none;
+}
+
 .dropzone.dragover {
   animation: dragPulse 0.75s ease-in-out infinite;
 }
@@ -456,6 +467,13 @@ h1 span {
 .dropzone:hover .dropzone-icon,
 .dropzone.dragover .dropzone-icon {
   transform: scale(1.15) translateY(-3px);
+}
+
+.dropzone.limit-reached .dropzone-icon,
+.dropzone.limit-reached:hover .dropzone-icon {
+  color: var(--muted);
+  background: var(--surface-2);
+  transform: none;
 }
 
 .dropzone strong {

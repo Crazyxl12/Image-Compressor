@@ -1,5 +1,6 @@
 const imageInput = document.querySelector("#imageInput");
 const dropzone = document.querySelector("#dropzone");
+const dropzoneHint = dropzone.querySelector("small");
 const compressionInput = document.querySelector("#compressionLevel");
 const compressionValue = document.querySelector("#compressionValue");
 const formatInput = document.querySelector("#format");
@@ -47,8 +48,12 @@ const legalTopicLinks = document.querySelectorAll("[data-legal-topic]");
 const siteNavLinks = document.querySelectorAll("[data-nav-link]");
 
 const MAX_FILES = 10;
-const MAX_CANVAS_PIXELS = 16000000;
-const MAX_CANVAS_SIDE = 8192;
+const DESKTOP_MAX_CANVAS_PIXELS = 16000000;
+const MOBILE_MAX_CANVAS_PIXELS = 6000000;
+const DESKTOP_MAX_CANVAS_SIDE = 8192;
+const MOBILE_MAX_CANVAS_SIDE = 4096;
+const MOBILE_RETRY_SCALE = 0.58;
+const BATCH_PROCESSING_PAUSE_MS = 90;
 const DEFAULT_FORMAT = "auto";
 const LOADING_MAX_FAKE_PROGRESS = 92;
 const LOADING_MIN_VISIBLE_MS = 1800;
@@ -109,6 +114,7 @@ let loadingTargetProgress = 0;
 updateCompressionRange();
 updateFormatShortcuts();
 updateCompressionSummaryForSelection();
+updateFileLimitState();
 
 compressionInput.addEventListener("input", () => {
   playCompressionSliderAnimation();
@@ -239,6 +245,12 @@ dropzone.addEventListener("drop", (event) => {
 });
 
 function loadImageFiles(files) {
+  if (selectedFiles.length >= MAX_FILES) {
+    setStatus(`Limite de ${MAX_FILES} imagens atingido. Remova uma imagem para adicionar outra.`, true);
+    updateFileLimitState();
+    return;
+  }
+
   const imageFiles = files.filter(isSupportedImageFile);
   const unsupportedCount = files.length - imageFiles.length;
 
@@ -248,8 +260,9 @@ function loadImageFiles(files) {
   }
 
   const mergedFiles = mergeSelectedFiles(selectedFiles, imageFiles);
-  const ignoredCount = Math.max(0, mergedFiles.length - MAX_FILES);
-  selectedFiles = mergedFiles.slice(0, MAX_FILES);
+  const limitedFiles = mergedFiles.slice(0, MAX_FILES);
+  const ignoredCount = Math.max(0, mergedFiles.length - limitedFiles.length);
+  selectedFiles = limitedFiles;
   clearCompressedOutput();
   updateSelectedFilesView();
   revokeUrl(originalObjectUrl);
@@ -325,17 +338,58 @@ function updateSelectedFilesView() {
       removeButton.textContent = "×";
       image.src = previewUrl;
       image.alt = file.name;
+      image.loading = "lazy";
+      image.decoding = "async";
       name.textContent = file.name;
       size.textContent = formatBytes(file.size);
       item.append(removeButton, image, name, size);
       return item;
     })
   );
+  updateFileLimitState();
+}
+
+function updateFileLimitState() {
+  const selectedCount = selectedFiles.length;
+  const remainingSlots = Math.max(0, MAX_FILES - selectedCount);
+  const limitReached = remainingSlots === 0;
+
+  imageInput.disabled = limitReached;
+  dropzone.classList.toggle("limit-reached", limitReached);
+  dropzone.setAttribute("aria-disabled", String(limitReached));
+
+  if (!dropzoneHint) {
+    return;
+  }
+
+  if (limitReached) {
+    dropzoneHint.textContent = `Limite de ${MAX_FILES} imagens atingido`;
+    return;
+  }
+
+  dropzoneHint.textContent =
+    selectedCount === 0
+      ? `Arraste ou clique para selecionar até ${MAX_FILES} imagens`
+      : `${remainingSlots} ${remainingSlots === 1 ? "vaga restante" : "vagas restantes"}`;
 }
 
 function revokeSelectedPreviewUrls() {
   selectedPreviewUrls.forEach((url) => revokeUrl(url));
   selectedPreviewUrls = [];
+}
+
+function shouldUseMobileMemoryMode(isBatch) {
+  return isBatch && selectedFiles.length >= 4 && isMobileLikeDevice();
+}
+
+function releaseSelectedThumbnails() {
+  selectedFilesList.querySelectorAll("[data-selected-preview-url]").forEach((item) => {
+    item.removeAttribute("data-selected-preview-url");
+  });
+  selectedFilesList.querySelectorAll("img").forEach((image) => {
+    image.removeAttribute("src");
+  });
+  revokeSelectedPreviewUrls();
 }
 
 function removeSelectedImage(index) {
@@ -406,11 +460,17 @@ async function compressSelectedImages() {
   clearCompressedOutput();
   compressButton.disabled = true;
   compressButton.classList.add("loading");
+  let shouldRestoreSelectedPreviews = false;
 
   try {
     const isBatch = selectedFiles.length > 1;
     const totalSteps = selectedFiles.length + (isBatch ? 1 : 0);
     const failedFiles = [];
+
+    if (shouldUseMobileMemoryMode(isBatch)) {
+      releaseSelectedThumbnails();
+      shouldRestoreSelectedPreviews = true;
+    }
 
     previewSection.hidden = isBatch;
     batchResults.hidden = !isBatch;
@@ -458,6 +518,8 @@ async function compressSelectedImages() {
           "Não foi possível processar esse arquivo."
         );
       }
+
+      await releaseMemoryBetweenImages();
     }
 
     if (!compressedResults.length) {
@@ -493,14 +555,33 @@ async function compressSelectedImages() {
     setStatus("Não foi possível comprimir essa imagem. Tente usar JPG, PNG ou WEBP.", true);
   } finally {
     hideLoadingScreen();
+    if (shouldRestoreSelectedPreviews && selectedFiles.length) {
+      updateSelectedFilesView();
+    }
     compressButton.classList.remove("loading");
     compressButton.disabled = false;
   }
 }
 
 async function compressImageFile(file) {
+  const attempts = isMobileLikeDevice() ? [1, MOBILE_RETRY_SCALE] : [1];
+  let lastError = null;
+
+  for (const scale of attempts) {
+    try {
+      return await compressImageFileWithScale(file, scale);
+    } catch (error) {
+      lastError = error;
+      await releaseMemoryBetweenImages();
+    }
+  }
+
+  throw lastError || new Error("Não foi possível comprimir a imagem.");
+}
+
+async function compressImageFileWithScale(file, scale) {
   const source = await loadImageSource(file);
-  const { width, height } = getSafeCanvasSize(source.width, source.height);
+  const { width, height } = getSafeCanvasSize(source.width, source.height, scale);
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
 
@@ -514,27 +595,27 @@ async function compressImageFile(file) {
 
   try {
     context.drawImage(source.image, 0, 0, width, height);
+    const targetBytes = calculateTargetBytes(file.size);
+    const candidates = await buildCompressionCandidates(canvas, file, targetBytes);
+    const bestCandidate = chooseBestCandidate(candidates, file.size, targetBytes);
+    const blob = bestCandidate ? bestCandidate.blob : file;
+    const url = URL.createObjectURL(blob);
+
+    return {
+      blob,
+      url,
+      originalName: file.name,
+      downloadName: bestCandidate ? buildFileName(file.name, bestCandidate.format) : file.name,
+      originalBytes: file.size,
+      finalBytes: blob.size,
+      dimensions: `${width} x ${height}px`,
+      format: bestCandidate ? formatLabel(bestCandidate.format, bestCandidate.level, bestCandidate.quality) : "Original",
+      result: bestCandidate ? calculateDifference(file.size, blob.size) : "Original mantida",
+    };
   } finally {
     source.close();
+    releaseCanvas(canvas);
   }
-
-  const targetBytes = calculateTargetBytes(file.size);
-  const candidates = await buildCompressionCandidates(canvas, file, targetBytes);
-  const bestCandidate = chooseBestCandidate(candidates, file.size, targetBytes);
-  const blob = bestCandidate ? bestCandidate.blob : file;
-  const url = URL.createObjectURL(blob);
-
-  return {
-    blob,
-    url,
-    originalName: file.name,
-    downloadName: bestCandidate ? buildFileName(file.name, bestCandidate.format) : file.name,
-    originalBytes: file.size,
-    finalBytes: blob.size,
-    dimensions: `${width} x ${height}px`,
-    format: bestCandidate ? formatLabel(bestCandidate.format, bestCandidate.level, bestCandidate.quality) : "Original",
-    result: bestCandidate ? calculateDifference(file.size, blob.size) : "Original mantida",
-  };
 }
 
 async function loadImageSource(file) {
@@ -587,19 +668,45 @@ function loadImageElement(url) {
   });
 }
 
-function getSafeCanvasSize(width, height) {
+function getSafeCanvasSize(width, height, scale = 1) {
   if (!width || !height) {
     throw new Error("Dimensões inválidas.");
   }
 
-  const sideScale = Math.min(1, MAX_CANVAS_SIDE / width, MAX_CANVAS_SIDE / height);
-  const pixelScale = Math.min(1, Math.sqrt(MAX_CANVAS_PIXELS / (width * height)));
-  const scale = Math.min(sideScale, pixelScale);
+  const limits = getCanvasLimits(scale);
+  const sideScale = Math.min(1, limits.maxSide / width, limits.maxSide / height);
+  const pixelScale = Math.min(1, Math.sqrt(limits.maxPixels / (width * height)));
+  const finalScale = Math.min(sideScale, pixelScale);
 
   return {
-    width: Math.max(1, Math.round(width * scale)),
-    height: Math.max(1, Math.round(height * scale))
+    width: Math.max(1, Math.round(width * finalScale)),
+    height: Math.max(1, Math.round(height * finalScale))
   };
+}
+
+function getCanvasLimits(scale) {
+  const mobile = isMobileLikeDevice();
+  const maxPixels = mobile ? MOBILE_MAX_CANVAS_PIXELS : DESKTOP_MAX_CANVAS_PIXELS;
+  const maxSide = mobile ? MOBILE_MAX_CANVAS_SIDE : DESKTOP_MAX_CANVAS_SIDE;
+
+  return {
+    maxPixels: Math.max(1200000, Math.round(maxPixels * scale)),
+    maxSide: Math.max(1600, Math.round(maxSide * Math.sqrt(scale)))
+  };
+}
+
+function isMobileLikeDevice() {
+  return typeof window.matchMedia === "function" && window.matchMedia("(max-width: 720px), (pointer: coarse)").matches;
+}
+
+async function releaseMemoryBetweenImages() {
+  await wait(BATCH_PROCESSING_PAUSE_MS);
+  await waitForPaint();
+}
+
+function releaseCanvas(canvas) {
+  canvas.width = 1;
+  canvas.height = 1;
 }
 
 function showCompressedResult(result) {
