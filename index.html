@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Image Compressor</title>
+    <link rel="icon" href="favicon.png" type="image/png" sizes="64x64" />
+    <link rel="shortcut icon" href="favicon.png" type="image/png" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#inicio" aria-label="Image Compressor">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 48 48" focusable="false">
+            <path class="brand-mark-page" d="M13 6h16l10 10v26H13z" />
+            <path class="brand-mark-fold" d="M29 6v11h10" />
+            <path class="brand-mark-picture" d="M17 31l7-8 5 5 3-4 5 7z" />
+            <circle class="brand-mark-sun" cx="20" cy="17" r="3" />
+          </svg>
+        </span>
+        <span class="brand-text">Image <strong>Compressor</strong></span>
+      </a>
+
+      <nav class="site-nav" aria-label="Navegação principal">
+        <a href="index.html" class="active" data-nav-link data-scroll-target="#inicio">Início</a>
+        <a href="guia.html" data-nav-link data-modal-topic="guide">Guia</a>
+        <a href="ajuda.html" data-nav-link data-modal-topic="help">Ajuda</a>
+      </nav>
+    </header>
+
+    <div class="badge-bar">
+      🔒 Segurança total — suas imagens são processadas direto no navegador. Nunca enviamos nada para servidores.
+    </div>
+
+    <main class="app" id="inicio">
+      <section class="hero">
+        <div class="hero-pills" aria-label="Recursos principais">
+          <span><i></i>100% privado</span>
+          <span><i></i>Sem servidores</span>
+          <span><i></i>Até 10 imagens</span>
+          <span><i></i>JPG, PNG e WEBP</span>
+        </div>
+      </section>
+
+      <section class="workspace-grid">
+        <aside class="panel" aria-label="Painel do compressor">
+          <div class="panel-body">
+            <label class="dropzone" id="dropzone" for="imageInput">
+              <input id="imageInput" type="file" accept="image/jpeg,image/png,image/webp" multiple />
+              <span class="dropzone-icon" aria-hidden="true">📁</span>
+              <strong>Escolher imagens</strong>
+              <small>Arraste ou clique para selecionar até 10 imagens</small>
+            </label>
+
+            <p class="status" id="status">Nenhuma imagem selecionada.</p>
+
+            <form class="controls" id="controls">
+              <label class="range-control">
+                <span class="control-heading">
+                  <span>Redução desejada</span>
+                  <strong id="compressionValue">62%</strong>
+                </span>
+                <input id="compressionLevel" type="range" min="5" max="95" value="62" />
+              </label>
+
+              <div class="format-control">
+                <span id="formatHeading">Formato de saída</span>
+                <input id="format" type="hidden" value="auto" />
+                <div class="format-shortcuts" aria-labelledby="formatHeading">
+                  <button class="format-shortcut is-active" type="button" data-format-option="auto">Auto</button>
+                  <button class="format-shortcut" type="button" data-format-option="image/jpeg">JPG</button>
+                  <button class="format-shortcut" type="button" data-format-option="image/webp">WEBP</button>
+                  <button class="format-shortcut" type="button" data-format-option="image/png">PNG</button>
+                </div>
+              </div>
+            </form>
+
+            <div class="actions">
+              <button id="compressButton" type="button" disabled>Comprimir imagens</button>
+              <a id="downloadLink" class="download disabled" download>Baixar imagem</a>
+              <a id="downloadZipLink" class="download download-all disabled" download="imagens-comprimidas.zip">
+                Baixar tudo .zip
+              </a>
+            </div>
+          </div>
+        </aside>
+
+        <section class="workspace-output" aria-label="Resultados da compressão">
+          <section class="savings" aria-label="Resumo da economia">
+            <div class="saving-stat">
+              <strong id="summaryOriginalSize">-</strong>
+              <span>Tamanho original</span>
+            </div>
+            <div class="saving-divider" aria-hidden="true"></div>
+            <div class="saving-stat">
+              <strong id="summaryCompressedSize" class="accent-stat">-</strong>
+              <span>Após compressão</span>
+            </div>
+            <div class="saving-divider" aria-hidden="true"></div>
+            <div class="saving-stat">
+              <strong id="summarySavings">-%</strong>
+              <span>Economia total</span>
+            </div>
+          </section>
+
+          <section class="selected-files" id="selectedFilesBox" hidden>
+            <div class="selected-header">
+              <strong id="selectedCount">0 imagens selecionadas</strong>
+              <button id="clearSelectionButton" class="clear-button" type="button">Limpar</button>
+            </div>
+            <ul id="selectedFilesList"></ul>
+          </section>
+
+          <section class="preview" id="previewSection" aria-live="polite">
+            <article class="preview-card">
+              <header>
+                <h2>Original</h2>
+                <span>Aguardando</span>
+              </header>
+              <div class="image-frame">
+                <img id="originalPreview" alt="" />
+                <span id="originalPlaceholder">Prévia aparece aqui</span>
+              </div>
+              <dl>
+                <div>
+                  <dt>Arquivo</dt>
+                  <dd id="originalName">-</dd>
+                </div>
+                <div>
+                  <dt>Tamanho</dt>
+                  <dd id="originalSize">-</dd>
+                </div>
+                <div>
+                  <dt>Dimensões</dt>
+                  <dd id="originalDimensions">-</dd>
+                </div>
+              </dl>
+            </article>
+
+            <article class="preview-card">
+              <header>
+                <h2>Comprimida</h2>
+                <span class="ready">Resultado</span>
+              </header>
+              <div class="image-frame">
+                <img id="compressedPreview" alt="" />
+                <span id="compressedPlaceholder">Resultado aqui</span>
+              </div>
+              <dl>
+                <div>
+                  <dt>Tamanho</dt>
+                  <dd id="compressedSize">-</dd>
+                </div>
+                <div>
+                  <dt>Formato</dt>
+                  <dd id="compressedFormat">-</dd>
+                </div>
+                <div>
+                  <dt>Resultado</dt>
+                  <dd id="difference">-</dd>
+                </div>
+                <div>
+                  <dt>Dimensões</dt>
+                  <dd id="compressedDimensions">-</dd>
+                </div>
+              </dl>
+            </article>
+          </section>
+
+          <section class="batch-results" id="batchResults" hidden>
+            <div class="results-header">
+              <h2>Resultados</h2>
+              <span id="resultsSummary">-</span>
+            </div>
+            <div class="results-list" id="resultsList"></div>
+          </section>
+        </section>
+      </section>
+
+      <section class="explain-cards" id="helpSection" aria-label="Explicações do conversor">
+        <article class="explain-card">
+          <span class="explain-icon" aria-hidden="true">🧭</span>
+          <h2>Como usar</h2>
+          <p>Escolha as imagens, ajuste a redução e o formato, depois clique em comprimir.</p>
+        </article>
+
+        <article class="explain-card">
+          <span class="explain-icon" aria-hidden="true">🖼️</span>
+          <h2>Formato ideal</h2>
+          <p>Use JPG para fotos, WEBP para arquivos menores e PNG para manter transparência.</p>
+        </article>
+
+        <article class="explain-card">
+          <span class="explain-icon" aria-hidden="true">🔐</span>
+          <h2>Sem envio externo</h2>
+          <p>Tudo é processado no seu dispositivo. Suas imagens nunca saem do navegador.</p>
+        </article>
+
+        <article class="explain-card">
+          <span class="explain-icon" aria-hidden="true">⬇️</span>
+          <h2>Baixe quando pronto</h2>
+          <p>Baixe individualmente ou todas juntas em um único arquivo ZIP.</p>
+        </article>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>© 2026 Image Compressor</span>
+      <nav aria-label="Links institucionais">
+        <a href="privacidade.html" data-legal-topic="privacy">Política de Privacidade</a>
+        <a href="termos.html" data-legal-topic="terms">Termos de Uso</a>
+      </nav>
+      <span>Imagens processadas localmente no navegador.</span>
+    </footer>
+
+    <div class="loading-screen" id="loadingScreen" hidden role="status" aria-live="polite">
+      <section class="loading-card" aria-labelledby="loadingTitle">
+        <span class="loading-eyebrow">Processando</span>
+        <div class="loading-meter" aria-hidden="true">
+          <span class="loading-track">
+            <span class="loading-fill" id="loadingFill"></span>
+            <span class="loading-thumb" id="loadingThumb"></span>
+          </span>
+          <strong id="loadingPercent">0%</strong>
+        </div>
+        <h2 id="loadingTitle">Preparando compressão</h2>
+        <p id="loadingMessage">Organizando suas imagens...</p>
+      </section>
+    </div>
+
+    <div class="image-modal" id="imageModal" hidden>
+      <button class="modal-close" id="closeModal" type="button" aria-label="Fechar prévia">×</button>
+      <figure>
+        <img id="modalImage" alt="Prévia ampliada da imagem comprimida" />
+        <figcaption>Clique fora da imagem ou aperte Esc para fechar</figcaption>
+      </figure>
+    </div>
+
+    <div class="legal-modal" id="legalModal" hidden>
+      <section class="legal-card" role="dialog" aria-modal="true" aria-labelledby="legalTitle">
+        <button class="legal-close" id="closeLegalModal" type="button" aria-label="Fechar">×</button>
+        <span class="legal-eyebrow" id="legalEyebrow">Privacidade local</span>
+        <h2 id="legalTitle">Política de Privacidade</h2>
+        <div class="legal-content" id="legalContent"></div>
+      </section>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
